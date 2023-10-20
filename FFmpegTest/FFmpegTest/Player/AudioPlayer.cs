@@ -1,4 +1,5 @@
 ﻿using FFmpeg.AutoGen;
+using FFmpegTest.Helper;
 using NAudio.Wave;
 using System;
 using System.Collections.Concurrent;
@@ -106,9 +107,25 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
                 AVFrame* frame = ffmpeg.av_frame_alloc();
                 AVPacket* pkt = (AVPacket*)pktPtr;
 
+                send:
                 int readResult = ffmpeg.avcodec_send_packet(_codecContext, pkt);
+                // 读完了
+                if (readResult == ffmpeg.AVERROR_EOF)
+                {
+                    break;
+                }
+
+                // 缓冲区满了，等下再放
+                if (readResult == ffmpeg.AVERROR(ffmpeg.EAGAIN))
+                {
+                    Thread.Sleep(100);
+                    goto send;
+                }
+
+                // 其它错误
                 if (readResult != 0)
                 {
+                    Debug.WriteLine(FFmpegHelper.GetError(readResult));
                     break;
                 }
 
