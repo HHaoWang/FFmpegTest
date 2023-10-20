@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net6.0-windows10.0.22621.0</TargetFramework>
+		<TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+		<RootNamespace>FFmpegTest</RootNamespace>
+		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<Platforms>x86;x64;ARM64</Platforms>
+		<RuntimeIdentifiers>win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
+		<UseWinUI>true</UseWinUI>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<StartupObject>FFmpegTest.Program</StartupObject>
+	</PropertyGroup>
+	<ItemGroup>
+		<Content Remove="Assets\ffmpeg\bin\x64\avcodec-60.dll" />
+		<Content Remove="Assets\ffmpeg\bin\x64\avdevice-60.dll" />
+		<Content Remove="Assets\ffmpeg\bin\x64\avfilter-9.dll" />
+		<Content Remove="Assets\ffmpeg\bin\x64\avformat-60.dll" />
+		<Content Remove="Assets\ffmpeg\bin\x64\avutil-58.dll" />
+		<Content Remove="Assets\ffmpeg\bin\x64\postproc-57.dll" />
+		<Content Remove="Assets\ffmpeg\bin\x64\swresample-4.dll" />
+		<Content Remove="Assets\ffmpeg\bin\x64\swscale-7.dll" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="FFmpeg.AutoGen" Version="6.0.0.2" />
+		<PackageReference Include="Microsoft.Graphics.Win2D" Version="1.1.0" />
+		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.4.231008000" />
+		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.756" />
+		<PackageReference Include="NAudio" Version="2.2.1" />
+		<Manifest Include="$(ApplicationManifest)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="Assets\ffmpeg\bin\x64\avcodec-60.dll">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Assets\ffmpeg\bin\x64\avdevice-60.dll">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Assets\ffmpeg\bin\x64\avfilter-9.dll">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Assets\ffmpeg\bin\x64\avformat-60.dll">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Assets\ffmpeg\bin\x64\avutil-58.dll">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Assets\ffmpeg\bin\x64\postproc-57.dll">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Assets\ffmpeg\bin\x64\swresample-4.dll">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Assets\ffmpeg\bin\x64\swscale-7.dll">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+</Project>
