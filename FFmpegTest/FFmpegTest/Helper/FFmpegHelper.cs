@@ -1,7 +1,7 @@
 ﻿using FFmpeg.AutoGen;
 using System.IO;
 using System;
-using Windows.Storage;
+using System.Runtime.InteropServices;
 
 namespace FFmpegTest.Helper;
 
@@ -26,5 +26,14 @@ public static class FFmpegHelper
 
             currentFolder = Directory.GetParent(currentFolder)?.FullName;
         }
+    }
+
+    public static unsafe string GetError(int errorCode)
+    {
+        IntPtr errorPtr = Marshal.AllocHGlobal(5000);
+        ffmpeg.av_strerror(errorCode, (byte*)errorPtr.ToPointer(), 5000);
+        string error = Marshal.PtrToStringAnsi(errorPtr);
+        Marshal.FreeHGlobal(errorPtr);
+        return error;
     }
 }

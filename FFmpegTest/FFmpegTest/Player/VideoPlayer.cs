@@ -1,6 +1,7 @@
 ﻿using FFmpeg.AutoGen;
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -31,11 +32,17 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
     public PlayState CurrentState { get; private set; } = PlayState.NoPlay;
 
     private Thread _decodeThread;
+    private Stopwatch _stopwatch = null;
 
     public void SetStartTime(TimeSpan startTime)
     {
         _startTimeRelatedToStream = startTime;
         _startTime = DateTime.Now;
+    }
+
+    public void SetStopWatch(Stopwatch stopwatch)
+    {
+        _stopwatch = stopwatch;
     }
 
     public int GetStreamIndex()
@@ -127,19 +134,22 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
                     break;
                 }
 
+                /*
                 while (_startTimeRelatedToStream is null)
                 {
-                    Thread.Sleep(10);
-                }
+                    Thread.Sleep(100);
+                }*/
 
-                while (_startTime == DateTime.MinValue)
+                while (_stopwatch == null)
                 {
                     Thread.Sleep(100);
                 }
 
-                double timeDistance = (DateTime.Now - _startTime).TotalSeconds -
+                /*double timeDistance = (DateTime.Now - _startTime).TotalSeconds -
                                       (frame->pts * _secondsPerPts -
-                                       _startTimeRelatedToStream.Value.TotalSeconds);
+                                       _startTimeRelatedToStream.Value.TotalSeconds);*/
+
+                double timeDistance = _stopwatch.Elapsed.TotalSeconds - frame->pts * _secondsPerPts;
 
                 // 放慢了，丢帧加快
                 if (timeDistance > 0)

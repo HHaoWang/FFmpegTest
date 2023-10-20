@@ -45,7 +45,7 @@ public unsafe class MediaPlayer : IDisposable
         _players[_videoPlayer.GetStreamIndex()] = _videoPlayer;
         _players[_audioPlayer.GetStreamIndex()] = _audioPlayer;
 
-        _audioPlayer.OnStartPlaying += (_, e) => { _videoPlayer.SetStartTime(e); };
+        _audioPlayer.OnStartPlaying += (_, e) => { _videoPlayer.SetStopWatch(e); };
 
         return true;
     }

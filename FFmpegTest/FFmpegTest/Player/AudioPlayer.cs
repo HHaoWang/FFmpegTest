@@ -27,12 +27,16 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
     private readonly ConcurrentQueue<IntPtr> _packetsQueue = new();
 
     private WaveOut _waveOut;
+
     private BufferedWaveProvider _bufferedWaveProvider;
+
     // 播放同步时钟
     private DateTime _startTime;
+    private Stopwatch _stopwatch = new();
+
     // 流播放时钟
     private TimeSpan _streamLastTimeSpan;
-    public event EventHandler<TimeSpan> OnStartPlaying;
+    public event EventHandler<Stopwatch> OnStartPlaying;
     public PlayState CurrentState { get; private set; } = PlayState.NoPlay;
 
     private bool _isNoMorePacket;
@@ -81,6 +85,7 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
         {
             CurrentState = PlayState.Playing;
             _waveOut.Resume();
+            _stopwatch.Start();
             return;
         }
 
@@ -112,7 +117,7 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
                 // 读完了
                 if (readResult == ffmpeg.AVERROR_EOF)
                 {
-                    break;
+                    ffmpeg.avcodec_send_packet(_codecContext, null);
                 }
 
                 // 缓冲区满了，等下再放
@@ -131,10 +136,24 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
 
                 while (true)
                 {
-                    ffmpeg.av_frame_unref(frame);
                     readResult = ffmpeg.avcodec_receive_frame(_codecContext, frame);
+                    // 读完了
+                    if (readResult == ffmpeg.AVERROR_EOF)
+                    {
+                        goto end;
+                    }
+
+                    // 需要更多pkt解码
+                    if (readResult == ffmpeg.AVERROR(ffmpeg.EAGAIN))
+                    {
+                        Thread.Sleep(100);
+                        goto send;
+                    }
+
+                    // 其它错误
                     if (readResult != 0)
                     {
+                        Debug.WriteLine(FFmpegHelper.GetError(readResult));
                         break;
                     }
 
@@ -148,11 +167,7 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
                         outSamples, frame->extended_data, frame->nb_samples);
                     if (indeedOutSamplesNumber < 0)
                     {
-                        IntPtr errorPtr = Marshal.AllocHGlobal(5000);
-                        ffmpeg.av_strerror(indeedOutSamplesNumber, (byte*)errorPtr.ToPointer(), 5000);
-                        string error = Marshal.PtrToStringAnsi(errorPtr);
-                        Debug.WriteLine(error);
-                        Marshal.FreeHGlobal(errorPtr);
+                        Debug.WriteLine(FFmpegHelper.GetError(indeedOutSamplesNumber),"debug");
                         return;
                     }
 
@@ -182,23 +197,25 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
                     {
                         _waveOut.Play();
                         _startTime = DateTime.Now;
-                        OnStartPlaying?.Invoke(null, _streamLastTimeSpan);
+                        _stopwatch = Stopwatch.StartNew();
+                        OnStartPlaying?.Invoke(null, _stopwatch);
                     }
                 }
             }
 
             Thread.Sleep(10);
         }
+
+        end: ;
     }
 
     public void Pause()
     {
-        if (CurrentState == PlayState.Playing)
-        {
-            _waveOut.Pause();
-            CurrentState = PlayState.Paused;
-            _streamLastTimeSpan += DateTime.Now - _startTime;
-        }
+        if (CurrentState != PlayState.Playing) return;
+        _waveOut.Pause();
+        CurrentState = PlayState.Paused;
+        _streamLastTimeSpan += DateTime.Now - _startTime;
+        _stopwatch.Stop();
     }
 
     public void NoMorePackets()
