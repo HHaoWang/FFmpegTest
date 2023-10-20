@@ -30,12 +30,14 @@ public sealed partial class MainWindow : Window
         if (_mediaPlayer is { CurrentState: PlayState.Playing })
         {
             _mediaPlayer.Pause();
+            PlayBtn.Content = "²¥·Å";
             return;
         }
 
         if (_mediaPlayer is { CurrentState: PlayState.Paused })
         {
             _mediaPlayer.Play();
+            PlayBtn.Content = "ÔÝÍ£";
             return;
         }
 
@@ -60,6 +62,7 @@ public sealed partial class MainWindow : Window
 
         _mediaPlayer.SubscribeFrameUpdateEvent(OnFrameUpdated);
         _mediaPlayer.Play();
+        PlayBtn.Content = "ÔÝÍ£";
     }
 
     private void OnFrameUpdated(object sender, byte[] e)

@@ -83,11 +83,6 @@ public unsafe class MediaPlayer : IDisposable
                     break;
                 }
 
-                if (_audioPlayer.GetUnsolvedItemsNumber() + _videoPlayer.GetUnsolvedItemsNumber() > 40)
-                {
-                    Thread.Sleep(100);
-                }
-
                 while (CurrentState == PlayState.Paused)
                 {
                     Thread.Sleep(100);

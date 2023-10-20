@@ -118,6 +118,11 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
         {
             while (_packetsQueue.TryDequeue(out IntPtr pktPtr))
             {
+                while (CurrentState == PlayState.Paused)
+                {
+                    Thread.Sleep(100);
+                }
+
                 AVFrame* frame = ffmpeg.av_frame_alloc();
                 AVPacket* pkt = (AVPacket*)pktPtr;
 
@@ -134,25 +139,15 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
                     break;
                 }
 
-                /*
-                while (_startTimeRelatedToStream is null)
-                {
-                    Thread.Sleep(100);
-                }*/
-
                 while (_stopwatch == null)
                 {
                     Thread.Sleep(100);
                 }
 
-                /*double timeDistance = (DateTime.Now - _startTime).TotalSeconds -
-                                      (frame->pts * _secondsPerPts -
-                                       _startTimeRelatedToStream.Value.TotalSeconds);*/
-
                 double timeDistance = _stopwatch.Elapsed.TotalSeconds - frame->pts * _secondsPerPts;
 
                 // 放慢了，丢帧加快
-                if (timeDistance > 0)
+                if (timeDistance > 0.5)
                 {
                     ffmpeg.av_frame_free(&frame);
                     ffmpeg.av_packet_free(&pkt);
@@ -161,7 +156,7 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
                 // 放快了，停一下
                 else if (timeDistance < 0)
                 {
-                    Thread.Sleep((int)(-timeDistance * 1000));
+                    Thread.Sleep((int)(-timeDistance * 1500));
                 }
 
                 OnReadFrame?.Invoke(this, VideoFrameConvertBytes(frame));

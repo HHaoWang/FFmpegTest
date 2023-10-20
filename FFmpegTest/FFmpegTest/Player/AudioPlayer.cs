@@ -31,11 +31,8 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
     private BufferedWaveProvider _bufferedWaveProvider;
 
     // 播放同步时钟
-    private DateTime _startTime;
     private Stopwatch _stopwatch = new();
-
-    // 流播放时钟
-    private TimeSpan _streamLastTimeSpan;
+    
     public event EventHandler<Stopwatch> OnStartPlaying;
     public PlayState CurrentState { get; private set; } = PlayState.NoPlay;
 
@@ -100,6 +97,7 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
             _waveOut.Init(_bufferedWaveProvider);
         }
 
+        CurrentState = PlayState.Playing;
         new Thread(Decode).Start();
     }
 
@@ -114,8 +112,9 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
 
                 send:
                 int readResult = ffmpeg.avcodec_send_packet(_codecContext, pkt);
+                ffmpeg.av_packet_free(&pkt);
                 // 读完了
-                if (readResult == ffmpeg.AVERROR_EOF)
+                if (_isNoMorePacket && readResult == ffmpeg.AVERROR_EOF)
                 {
                     ffmpeg.avcodec_send_packet(_codecContext, null);
                 }
@@ -128,7 +127,7 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
                 }
 
                 // 其它错误
-                if (readResult != 0)
+                if (readResult != 0 && readResult != ffmpeg.AVERROR_EOF)
                 {
                     Debug.WriteLine(FFmpegHelper.GetError(readResult));
                     break;
@@ -140,14 +139,14 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
                     // 读完了
                     if (readResult == ffmpeg.AVERROR_EOF)
                     {
-                        goto end;
+                        break;
                     }
 
                     // 需要更多pkt解码
                     if (readResult == ffmpeg.AVERROR(ffmpeg.EAGAIN))
                     {
-                        Thread.Sleep(100);
-                        goto send;
+                        //Thread.Sleep(100);
+                        break;
                     }
 
                     // 其它错误
@@ -167,7 +166,7 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
                         outSamples, frame->extended_data, frame->nb_samples);
                     if (indeedOutSamplesNumber < 0)
                     {
-                        Debug.WriteLine(FFmpegHelper.GetError(indeedOutSamplesNumber),"debug");
+                        Debug.WriteLine(FFmpegHelper.GetError(indeedOutSamplesNumber), "debug");
                         return;
                     }
 
@@ -177,8 +176,8 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
 
                     byte[] bytes = new byte[indeedOutSize];
                     Marshal.Copy((IntPtr)convertOut, bytes, 0, (int)indeedOutSize);
+
                     ffmpeg.av_free(convertOut);
-                    ffmpeg.av_packet_free(&pkt);
 
                     while (_bufferedWaveProvider.BufferedBytes + (int)indeedOutSize >
                            _bufferedWaveProvider.BufferLength)
@@ -186,35 +185,34 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
                         Thread.Sleep(1000);
                     }
 
-                    while (CurrentState == PlayState.Paused)
-                    {
-                        Thread.Sleep(100);
-                    }
-
                     _bufferedWaveProvider.AddSamples(bytes, 0, bytes.Length);
 
-                    if (_waveOut.PlaybackState != PlaybackState.Playing)
+                    if (_waveOut.PlaybackState != PlaybackState.Playing && CurrentState == PlayState.Playing)
                     {
                         _waveOut.Play();
-                        _startTime = DateTime.Now;
                         _stopwatch = Stopwatch.StartNew();
                         OnStartPlaying?.Invoke(null, _stopwatch);
                     }
                 }
+
+                while (CurrentState == PlayState.Paused)
+                {
+                    Thread.Sleep(100);
+                }
+
+                ffmpeg.av_frame_free(&frame);
             }
 
-            Thread.Sleep(10);
+            Thread.Sleep(50);
         }
-
-        end: ;
     }
 
     public void Pause()
     {
         if (CurrentState != PlayState.Playing) return;
+        
         _waveOut.Pause();
         CurrentState = PlayState.Paused;
-        _streamLastTimeSpan += DateTime.Now - _startTime;
         _stopwatch.Stop();
     }
 

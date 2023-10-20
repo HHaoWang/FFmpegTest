@@ -16,9 +16,9 @@
             <RowDefinition Height="60"></RowDefinition>
         </Grid.RowDefinitions>
         <canvas:CanvasControl x:Name="Canvas" />
-        <StackPanel Orientation="Horizontal" Grid.Row="1" HorizontalAlignment="Center">
-            <TextBox x:Name="TextBox" VerticalAlignment="Center" Width="300" Text="G:\igebaCache\210005249.mkv" />
-            <Button Content="播放" Click="OnClickPlay" />
+        <StackPanel Orientation="Horizontal" Grid.Row="1" HorizontalAlignment="Center" Spacing="12">
+            <TextBox x:Name="TextBox" VerticalAlignment="Center" Width="300" Text="G:\igebaCache\210017213.mkv" />
+            <Button Content="播放" Click="OnClickPlay" x:Name="PlayBtn"/>
             <TextBlock Name="TextBlock" />
         </StackPanel>
     </Grid>
