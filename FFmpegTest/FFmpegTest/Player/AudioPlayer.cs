@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Microsoft.UI.Dispatching;
 
 namespace FFmpegTest.Player;
 
@@ -23,6 +24,7 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
 
     //缓冲区指针
     private readonly ConcurrentQueue<IntPtr> _packetsQueue = new();
+    private DispatcherQueueController _waveOutDispatcherQueueController;
     private WaveOut _waveOut;
     private BufferedWaveProvider _bufferedWaveProvider;
 
@@ -40,6 +42,11 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
     public AudioPlayer()
     {
         _notifyTimer = new(_ => OnElapsedTimeChanged?.Invoke(null, EventArgs.Empty), null, 0, 500);
+        _waveOutDispatcherQueueController = DispatcherQueueController.CreateOnDedicatedThread();
+        _waveOutDispatcherQueueController.DispatcherQueue.TryEnqueue(() =>
+        {
+            _waveOut = new();
+        });
     }
 
     public int GetStreamIndex()
@@ -91,9 +98,8 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
         }
 
         _isNoMorePacket = false;
-        if (_waveOut == null)
+        if (_bufferedWaveProvider == null)
         {
-            _waveOut = new();
             _bufferedWaveProvider = new(new(OutSampleRate, 2))
             {
                 BufferLength = 1024 * 1024 * 10
