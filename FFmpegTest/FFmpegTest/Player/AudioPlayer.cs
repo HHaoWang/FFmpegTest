@@ -6,7 +6,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace FFmpegTest.Player;
 
@@ -23,20 +22,25 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
     private AVChannelLayout _outChannelLayout;
 
     //缓冲区指针
-
     private readonly ConcurrentQueue<IntPtr> _packetsQueue = new();
-
     private WaveOut _waveOut;
-
     private BufferedWaveProvider _bufferedWaveProvider;
 
     // 播放同步时钟
     private Stopwatch _stopwatch = new();
-    
+    private readonly Timer _notifyTimer;
+
+    public TimeSpan ElapsedTime => _stopwatch.Elapsed;
     public event EventHandler<Stopwatch> OnStartPlaying;
     public PlayState CurrentState { get; private set; } = PlayState.NoPlay;
+    public event EventHandler OnCompletePlaying;
 
     private bool _isNoMorePacket;
+
+    public AudioPlayer()
+    {
+        _notifyTimer = new(_ => OnElapsedTimeChanged?.Invoke(null, EventArgs.Empty), null, 0, 500);
+    }
 
     public int GetStreamIndex()
     {
@@ -107,6 +111,11 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
         {
             while (_packetsQueue.TryDequeue(out IntPtr pktPtr))
             {
+                if (CurrentState == PlayState.NoPlay)
+                {
+                    goto complete;
+                }
+
                 AVFrame* frame = ffmpeg.av_frame_alloc();
                 AVPacket* pkt = (AVPacket*)pktPtr;
 
@@ -135,6 +144,11 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
 
                 while (true)
                 {
+                    if (CurrentState == PlayState.NoPlay)
+                    {
+                        goto complete;
+                    }
+
                     readResult = ffmpeg.avcodec_receive_frame(_codecContext, frame);
                     // 读完了
                     if (readResult == ffmpeg.AVERROR_EOF)
@@ -187,17 +201,16 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
 
                     _bufferedWaveProvider.AddSamples(bytes, 0, bytes.Length);
 
-                    if (_waveOut.PlaybackState != PlaybackState.Playing && CurrentState == PlayState.Playing)
-                    {
-                        _waveOut.Play();
-                        _stopwatch = Stopwatch.StartNew();
-                        OnStartPlaying?.Invoke(null, _stopwatch);
-                    }
+                    InitWaveOut(outChannels);
                 }
 
                 while (CurrentState == PlayState.Paused)
                 {
                     Thread.Sleep(100);
+                    if (CurrentState == PlayState.NoPlay)
+                    {
+                        goto complete;
+                    }
                 }
 
                 ffmpeg.av_frame_free(&frame);
@@ -205,12 +218,34 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
 
             Thread.Sleep(50);
         }
+
+        complete:
+        OnComplete();
+    }
+
+    private void InitWaveOut(int channels = 2)
+    {
+        if (_waveOut.OutputWaveFormat.Channels != channels)
+        {
+            _bufferedWaveProvider = new(new(OutSampleRate, channels))
+            {
+                BufferLength = 1024 * 1024 * 10
+            };
+            _waveOut.Init(_bufferedWaveProvider);
+        }
+
+        if (_waveOut.PlaybackState != PlaybackState.Playing && CurrentState == PlayState.Playing)
+        {
+            _waveOut.Play();
+            _stopwatch = Stopwatch.StartNew();
+            OnStartPlaying?.Invoke(null, _stopwatch);
+        }
     }
 
     public void Pause()
     {
         if (CurrentState != PlayState.Playing) return;
-        
+
         _waveOut.Pause();
         CurrentState = PlayState.Paused;
         _stopwatch.Stop();
@@ -252,7 +287,37 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
         return true;
     }
 
-    public int GetUnsolvedItemsNumber() => _packetsQueue.Count;
+    private void OnComplete()
+    {
+        while (_bufferedWaveProvider.BufferedBytes != 0 && CurrentState != PlayState.NoPlay)
+        {
+            Thread.Sleep(100);
+        }
+
+        AVCodecContext* tempCodecContext = _codecContext;
+        ffmpeg.avcodec_free_context(&tempCodecContext);
+        _codecContext = null;
+        SwrContext* audioConvertContext = _audioConvertContext;
+        ffmpeg.swr_free(&audioConvertContext);
+        _stream = null;
+        _avCodec = null;
+        _waveOut.Stop();
+        _bufferedWaveProvider.ClearBuffer();
+        _stopwatch.Stop();
+        CurrentState = PlayState.NoPlay;
+        _packetsQueue.Clear();
+        OnCompletePlaying?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void Stop()
+    {
+        CurrentState = PlayState.NoPlay;
+        // 如果已经解码完成就已经释放了内存，无需手动释放
+        // 如果还没解码完就停，关了声音输出就好，其余等待解码线程自动检测到停止状态释放内存
+        _bufferedWaveProvider.ClearBuffer();
+        _waveOut.Stop();
+        _stopwatch.Stop();
+    }
 
     public void Dispose()
     {
@@ -263,5 +328,8 @@ public unsafe class AudioPlayer : IPlayer, IDisposable
         _avCodec = null;
         _stream = null;
         _audioConvertContext = null;
+        _notifyTimer.Dispose();
     }
+
+    public event EventHandler OnElapsedTimeChanged;
 }

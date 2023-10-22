@@ -1,9 +1,11 @@
+using System;
 using Windows.Graphics.DirectX;
 using Microsoft.UI.Xaml;
 using FFmpegTest.Helper;
 using FFmpegTest.Player;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Effects;
+using Microsoft.UI.Xaml.Controls;
 
 namespace FFmpegTest;
 
@@ -46,23 +48,25 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (_mediaPlayer is not null)
-        {
-            _mediaPlayer.UnSubscribeFrameUpdateEvent(OnFrameUpdated);
-            _mediaPlayer.Dispose();
-            _mediaPlayer = null;
-        }
-
-        _mediaPlayer = new();
+        _mediaPlayer ??= new();
+        _mediaPlayer.OnCompletePlaying += OnComplete;
+        _mediaPlayer.OnElapsedTimeChanged += OnElapsedTimeChanged;
         bool result = _mediaPlayer.Open(TextBox.Text);
         if (!result)
         {
             TextBlock.Text = "打开失败";
         }
 
+        DurationText.Text = _mediaPlayer.Duration?.ToString(@"hh\:mm\:ss") ?? "--:--:--";
         _mediaPlayer.SubscribeFrameUpdateEvent(OnFrameUpdated);
         _mediaPlayer.Play();
         PlayBtn.Content = "暂停";
+        StopBtn.IsEnabled = true;
+    }
+
+    private void OnElapsedTimeChanged(object sender, EventArgs e)
+    {
+        DispatcherQueue.TryEnqueue(() => { ElapsedTimeText.Text = _mediaPlayer.ElapsedTime.ToString(@"hh\:mm\:ss"); });
     }
 
     private void OnFrameUpdated(object sender, byte[] e)
@@ -71,5 +75,35 @@ public sealed partial class MainWindow : Window
         _bitmap = CanvasBitmap.CreateFromBytes(CanvasDevice.GetSharedDevice(), e, player.FrameWidth, player.FrameHeight,
             DirectXPixelFormat.B8G8R8A8UIntNormalized);
         Canvas.Invalidate();
+    }
+
+    private void OnComplete(object sender, EventArgs e)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            Canvas.Invalidate();
+            TextBox.Text = "";
+            ElapsedTimeText.Text = "";
+            PlayBtn.Content = "播放";
+            StopBtn.IsEnabled = false;
+        });
+    }
+
+    private void OnDelayChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (_mediaPlayer is null)
+        {
+            return;
+        }
+
+        _mediaPlayer.PicDelay = args.NewValue;
+    }
+
+    private void OnClickStop(object sender, RoutedEventArgs e)
+    {
+        _mediaPlayer?.Stop();
+        StopBtn.IsEnabled = false;
+        TextBox.Text = "";
+        PlayBtn.Content = "播放";
     }
 }

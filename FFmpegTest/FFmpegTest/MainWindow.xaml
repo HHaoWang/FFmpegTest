@@ -18,8 +18,15 @@
         <canvas:CanvasControl x:Name="Canvas" />
         <StackPanel Orientation="Horizontal" Grid.Row="1" HorizontalAlignment="Center" Spacing="12">
             <TextBox x:Name="TextBox" VerticalAlignment="Center" Width="300" Text="G:\igebaCache\210017213.mkv" />
-            <Button Content="播放" Click="OnClickPlay" x:Name="PlayBtn"/>
-            <TextBlock Name="TextBlock" />
+            <Button Content="播放" Click="OnClickPlay" x:Name="PlayBtn" />
+            <Button Content="停止" Click="OnClickStop" x:Name="StopBtn" IsEnabled="False"/>
+            <TextBlock Name="TextBlock" VerticalAlignment="Center"/>
+            <TextBlock Name="ElapsedTimeText" VerticalAlignment="Center"/>
+            <TextBlock Name="DurationText" VerticalAlignment="Center"/>
+            <TextBlock Text="画面延迟：" VerticalAlignment="Center"/>
+            <NumberBox x:Name="DelayInput" ValueChanged="OnDelayChanged"
+                       Value="0" SpinButtonPlacementMode="Inline" VerticalAlignment="Center"
+                       SmallChange="0.1" LargeChange="1.0" />
         </StackPanel>
     </Grid>
 </Window>

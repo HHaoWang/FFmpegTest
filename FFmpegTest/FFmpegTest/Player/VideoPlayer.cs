@@ -19,26 +19,18 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
     private byte_ptrArray4 _targetData;
     private int_array4 _targetLineSize;
 
+    private readonly ConcurrentQueue<IntPtr> _packetsQueue = new();
+    private bool _isNoMorePacket;
+    private double _secondsPerPts;
+    private Thread _decodeThread;
+    private Stopwatch _stopwatch;
+
     public int FrameWidth;
     public int FrameHeight;
     public event EventHandler<byte[]> OnReadFrame;
-
-    private readonly ConcurrentQueue<IntPtr> _packetsQueue = new();
-    private bool _isNoMorePacket;
-
-    private double _secondsPerPts;
-    private TimeSpan? _startTimeRelatedToStream;
-    private DateTime _startTime = DateTime.MinValue;
+    public double Delay { get; set; }
     public PlayState CurrentState { get; private set; } = PlayState.NoPlay;
-
-    private Thread _decodeThread;
-    private Stopwatch _stopwatch = null;
-
-    public void SetStartTime(TimeSpan startTime)
-    {
-        _startTimeRelatedToStream = startTime;
-        _startTime = DateTime.Now;
-    }
+    public event EventHandler OnCompletePlaying;
 
     public void SetStopWatch(Stopwatch stopwatch)
     {
@@ -93,7 +85,6 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
         }
 
         _secondsPerPts = ffmpeg.av_q2d(_stream->time_base);
-
         return true;
     }
 
@@ -102,13 +93,12 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
         if (CurrentState == PlayState.Paused)
         {
             CurrentState = PlayState.Playing;
-            _startTime = DateTime.Now;
             return;
         }
 
         _isNoMorePacket = false;
-
-        _decodeThread = new Thread(Decode);
+        CurrentState = PlayState.Playing;
+        _decodeThread = new(Decode);
         _decodeThread.Start();
     }
 
@@ -118,9 +108,18 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
         {
             while (_packetsQueue.TryDequeue(out IntPtr pktPtr))
             {
+                if (CurrentState == PlayState.NoPlay)
+                {
+                    goto complete;
+                }
+
                 while (CurrentState == PlayState.Paused)
                 {
                     Thread.Sleep(100);
+                    if (CurrentState == PlayState.NoPlay)
+                    {
+                        goto complete;
+                    }
                 }
 
                 AVFrame* frame = ffmpeg.av_frame_alloc();
@@ -144,7 +143,7 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
                     Thread.Sleep(100);
                 }
 
-                double timeDistance = _stopwatch.Elapsed.TotalSeconds - frame->pts * _secondsPerPts;
+                double timeDistance = _stopwatch.Elapsed.TotalSeconds - frame->pts * _secondsPerPts + Delay;
 
                 // 放慢了，丢帧加快
                 if (timeDistance > 0.5)
@@ -154,7 +153,8 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
                     continue;
                 }
                 // 放快了，停一下
-                else if (timeDistance < 0)
+
+                if (timeDistance < 0)
                 {
                     Thread.Sleep((int)(-timeDistance * 1500));
                 }
@@ -166,6 +166,9 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
 
             Thread.Sleep(10);
         }
+
+        complete:
+        OnComplete();
     }
 
     public void NoMorePackets()
@@ -178,7 +181,24 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
         CurrentState = PlayState.Paused;
     }
 
-    public int GetUnsolvedItemsNumber() => _packetsQueue.Count;
+    private void OnComplete()
+    {
+        Marshal.FreeHGlobal(_frameBufferPtr);
+        AVCodecContext* tempCodecContext = _codecContext;
+        ffmpeg.avcodec_free_context(&tempCodecContext);
+        _codecContext = null;
+        _stream = null;
+        _avCodec = null;
+        _convertContext = null;
+        CurrentState = PlayState.NoPlay;
+        _packetsQueue.Clear();
+        OnCompletePlaying?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void Stop()
+    {
+        CurrentState = PlayState.NoPlay;
+    }
 
     /// <summary>
     /// 初始化转换器
@@ -205,8 +225,8 @@ public unsafe class VideoPlayer : IPlayer, IDisposable
         int bufferSize = ffmpeg.av_image_get_buffer_size(targetFormat, targetWidth, targetHeight, 1);
         //创建一个指针
         _frameBufferPtr = Marshal.AllocHGlobal(bufferSize);
-        _targetData = new byte_ptrArray4();
-        _targetLineSize = new int_array4();
+        _targetData = new();
+        _targetLineSize = new();
         ffmpeg.av_image_fill_arrays(ref _targetData, ref _targetLineSize, (byte*)_frameBufferPtr, targetFormat,
             targetWidth, targetHeight, 1);
         return true;
